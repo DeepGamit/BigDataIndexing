@@ -2,6 +2,8 @@ package com.bigdataindexing.project.service;
 
 import com.bigdataindexing.project.controller.PlanController;
 import com.bigdataindexing.project.exception.InvalidInputException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.everit.json.schema.Schema;
 import org.everit.json.schema.ValidationException;
 import org.everit.json.schema.loader.SchemaLoader;
@@ -11,10 +13,7 @@ import org.json.JSONTokener;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 public class PlanService {
 
@@ -45,12 +44,22 @@ public class PlanService {
     }
 
     // Generate E-Tag
-    public String generateETag(JSONObject object){
-        String tag = String.valueOf(object.hashCode());
-        System.out.println(tag);
-        return tag;
-    }
+//    public String generateETag(JSONObject object){
+//        String tag = String.valueOf(object.hashCode());
+//        return tag;
+//    }
 
+    public boolean checkIfPlanExists(String objectKey){
+
+        Jedis jedis = this.getJedisPool().getResource();
+        String jsonString = jedis.get(objectKey);
+        jedis.close();
+        if (jsonString == null || jsonString.isEmpty()) {
+            return false;
+        } else {
+            return true;
+        }
+    }
 
     public String savePlan(JSONObject jsonObject, String objectType){
 
@@ -72,7 +81,8 @@ public class PlanService {
                 objectKeysToDelete.add(key);
 
                 Jedis jedis = this.jedisPool.getResource();
-                String relKey = objectType + "_" + jsonObject.get("objectId") + "_" + key;
+                String relKey = jsonObject.get("objectId") + "_" + key;
+                System.out.println(relKey + " :---: " + objectKey);
                 jedis.set(relKey, objectKey);
                 jedis.close();
 
@@ -94,7 +104,8 @@ public class PlanService {
                 objectKeysToDelete.add(key);
 
                 Jedis jedis = this.getJedisPool().getResource();
-                String relKey = objectType + "_" + jsonObject.get("objectId") + "_" + key;
+                String relKey = jsonObject.get("objectId") + "_" + key;
+                System.out.println(relKey + " :---: " + Arrays.toString(tempArrayObject));
                 jedis.set(relKey, Arrays.toString(tempArrayObject));
                 jedis.close();
             }
@@ -106,8 +117,8 @@ public class PlanService {
         }
 
         // Save the Object in Redis
-        String objectKey = objectType + "_" + objectID;
-        System.out.println(objectKey);
+        String objectKey = objectID;
+        System.out.println(objectKey + " :---: " + jsonObject.toString());
         Jedis jedis = this.getJedisPool().getResource();
         jedis.set(objectKey, jsonObject.toString());
         jedis.close();
@@ -116,21 +127,135 @@ public class PlanService {
 
     }
 
-    public JSONObject getPlan(String objectKey){
+    public JSONObject getPlan(String objectKey) {
 
         JedisPool jedisPool = new JedisPool();
         Jedis jedis;
         JSONObject jsonObject;
 
-        jedis = jedisPool.getResource();
-        String jsonString = jedis.get(objectKey);
-        jedis.close();
-        if (jsonString == null || jsonString.isEmpty()) {
-            return null;
+        if (isStringArray(objectKey)) {
+            ArrayList<JSONObject> arrayValue = getFromArrayString(objectKey);
+            jsonObject = new JSONObject(arrayValue);
+        } else {
+
+            jedis = jedisPool.getResource();
+            String jsonString = jedis.get(objectKey);
+            jedis.close();
+            if (jsonString == null || jsonString.isEmpty()) {
+                return null;
+            }
+            jsonObject = new JSONObject(jsonString);
         }
-        jsonObject = new JSONObject(jsonString);
+        jedis = jedisPool.getResource();
+        Set<String> relatedKeys = jedis.keys(objectKey + "_*");
+        jedis.close();
 
+       for(String relatedKey: relatedKeys){
+
+           String partialObjectKey = relatedKey.substring(relatedKey.lastIndexOf('_')+1);
+           jedis = jedisPool.getResource();
+           String partialObjectDBKey = jedis.get(relatedKey);
+           jedis.close();
+
+           if (partialObjectDBKey == null || partialObjectDBKey.isEmpty()) {
+               continue;
+           }
+
+           if(isStringArray(partialObjectDBKey)) {
+               ArrayList<JSONObject> arrayValue = getFromArrayString(partialObjectDBKey);
+               jsonObject.put(partialObjectKey, arrayValue);
+           } else {
+               JSONObject partObj = this.getPlan(partialObjectDBKey);
+               jsonObject.put(partialObjectKey, partObj);
+           }
+
+       }
         return  jsonObject;
+    }
 
+    public boolean deletePlan(String objectKey){
+
+        JedisPool jedisPool = new JedisPool();
+        Jedis jedis;
+
+        if(isStringArray(objectKey)) {
+            // delete all keys in the array
+            String[] arrayKeys = objectKey.substring(objectKey.indexOf("[")+1, objectKey.lastIndexOf("]")).split(", ");
+            for (String key : arrayKeys) {
+                if(!this.deletePlan(key)) {
+                    return false;
+                }
+            }
+        } else{
+            jedis = jedisPool.getResource();
+            if(jedis.del(objectKey) < 1) {
+                // deletion failed
+                jedis.close();
+                return false;
+            }
+            jedis.close();
+        }
+
+        // fetch additional relations for the object, if present
+        jedis = jedisPool.getResource();
+        Set<String> relatedKeys = jedis.keys(objectKey + "_*");
+        jedis.close();
+        for(String relatedKey: relatedKeys) {
+
+            String partialObjectKey = relatedKey.substring(relatedKey.lastIndexOf('_')+1);
+
+            // fetch the id stored at partObjKey
+            jedis = jedisPool.getResource();
+            String partialObjectDBKey = jedis.get(relatedKey);
+            if(jedis.del(relatedKey) < 1) {
+                //deletion failed
+                return false;
+            }
+            jedis.close();
+            if (partialObjectDBKey == null || partialObjectDBKey.isEmpty()) {
+                continue;
+            }
+
+            if(isStringArray(partialObjectDBKey)) {
+                // delete all keys in the array
+                String[] arrayKeys = partialObjectDBKey.substring(partialObjectDBKey.indexOf("[")+1, partialObjectDBKey.lastIndexOf("]")).split(", ");
+                for (String key : arrayKeys) {
+                    if(!this.deletePlan(key)) {
+                        //deletion failed
+                        return false;
+                    }
+                }
+            } else {
+                if(!this.deletePlan(partialObjectDBKey)){
+                    //deletion failed
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private boolean isStringArray(String str) {
+        if (str.indexOf('[') < str.indexOf(']')) {
+            if (str.substring((str.indexOf('[') + 1), str.indexOf(']')).split(", ").length > 0)
+                return true;
+            else
+                return false;
+        } else {
+            return false;
+        }
+    }
+
+    private ArrayList<JSONObject> getFromArrayString(String keyArray) {
+        ArrayList<JSONObject> jsonArray = new ArrayList<>();
+        String[] array = keyArray.substring((keyArray.indexOf('[') + 1), keyArray.indexOf(']')).split(", ");
+
+        for (String key : array) {
+            JSONObject partialObject = this.getPlan(key);
+            jsonArray.add(partialObject);
+        }
+
+        return jsonArray;
     }
 }
