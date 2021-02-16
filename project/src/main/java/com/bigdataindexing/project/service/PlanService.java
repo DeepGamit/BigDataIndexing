@@ -43,12 +43,6 @@ public class PlanService {
         }
     }
 
-    // Generate E-Tag
-//    public String generateETag(JSONObject object){
-//        String tag = String.valueOf(object.hashCode());
-//        return tag;
-//    }
-
     public boolean checkIfPlanExists(String objectKey){
 
         Jedis jedis = this.getJedisPool().getResource();

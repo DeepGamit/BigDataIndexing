@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 import org.json.JSONObject;
 
 import javax.servlet.http.HttpServletResponse;
+import java.net.URI;
+import java.net.URISyntaxException;
 
 
 @RestController
@@ -22,7 +24,7 @@ public class PlanController {
 
 
     @RequestMapping(method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_VALUE, value = "/plan")
-    public ResponseEntity createPlan(@RequestBody String jsonData, HttpServletResponse response) {
+    public ResponseEntity createPlan(@RequestBody String jsonData) throws URISyntaxException {
 
         JSONObject jsonPlan = new JSONObject(new JSONTokener(jsonData));
         this.planService.validatePlan(jsonPlan);
@@ -33,9 +35,12 @@ public class PlanController {
 
         String objectID = this.planService.savePlan(jsonPlan, (String)jsonPlan.get("objectType"));
 
-//        String ETag = this.planService.generateETag(jsonPlan);
-
-        return ResponseEntity.status(HttpStatus.CREATED).body("{\"objectId\": \"" + objectID + "\"}");
+        String message = "Plan Created Successfully!!";
+        String responseBody = "{\n" +
+                            "\t\"objectId\": \"" + objectID + "\"\n" +
+                            "\t\"message\": \"" + message + "\"\n" +
+                            "}";
+        return ResponseEntity.created(new URI(jsonPlan.get("objectId").toString())).body(responseBody);
     }
 
     @RequestMapping(method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE, value = "/plan/{objectID}")
@@ -57,7 +62,7 @@ public class PlanController {
             throw new PlanNotFoundException("Plan not found!!");
         }
 
-        return ResponseEntity.status(HttpStatus.NO_CONTENT).body("");
+        return ResponseEntity.noContent().build();
     }
 
 }
