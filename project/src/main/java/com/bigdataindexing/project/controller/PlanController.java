@@ -25,7 +25,7 @@ public class PlanController {
         JSONObject jsonPlan = new JSONObject(new JSONTokener(jsonData));
         this.planService.validatePlan(jsonPlan);
 
-        if(this.planService.checkIfKeyExists((String) jsonPlan.get("objectId"))){
+        if(this.planService.checkIfKeyExists("plan" + "_" + (String) jsonPlan.get("objectId"))){
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(new JSONObject().put("message", "Plan already exists!!").toString());
         }
@@ -40,15 +40,15 @@ public class PlanController {
         return ResponseEntity.created(new URI(jsonPlan.get("objectId").toString())).body(responseBody);
     }
 
-    @RequestMapping(method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE, value = "/plan/{objectID}")
-    public ResponseEntity getPlan(@PathVariable String objectID){
+    @RequestMapping(method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE, value = "/{type}/{objectID}")
+    public ResponseEntity getPlan(@PathVariable String type, @PathVariable String objectID){
 
-        if(!this.planService.checkIfKeyExists(objectID)){
+        if(!this.planService.checkIfKeyExists(type + "_" + objectID)){
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new JSONObject().put("message", "ObjectId does not exists!!").toString());
         }
 
-        JSONObject jsonObject = this.planService.getPlan( objectID);
+        JSONObject jsonObject = this.planService.getPlan(type + "_" + objectID);
 
         return ResponseEntity.ok().body(jsonObject.toString());
     }
@@ -56,12 +56,12 @@ public class PlanController {
     @RequestMapping(method =  RequestMethod.DELETE, produces = MediaType.APPLICATION_JSON_VALUE, value = "/plan/{objectID}")
     public ResponseEntity deletePlan(@PathVariable String objectID){
 
-        if(!this.planService.checkIfKeyExists(objectID)){
+        if(!this.planService.checkIfKeyExists("plan" + "_" + objectID)){
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new JSONObject().put("message", "ObjectId does not exists!!").toString());
         }
 
-        if(!this.planService.deletePlan(objectID)){
+        if(!this.planService.deletePlan("plan" + "_"  + objectID)){
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new JSONObject().put("message", "Some error was encountered while deleting!!").toString());
         } else {

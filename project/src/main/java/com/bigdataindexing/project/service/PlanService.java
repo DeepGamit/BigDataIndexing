@@ -76,8 +76,7 @@ public class PlanService {
                 objectKeysToDelete.add(key);
 
                 Jedis jedis = this.jedisPool.getResource();
-                String relKey = jsonObject.get("objectId") + "_" + key;
-//                String relKey = objectType + "_" + jsonObject.get("objectId") + "_" + key;
+                String relKey = objectType + "_" + jsonObject.get("objectId") + "_" + key;
                 System.out.println(relKey + " :---: " + objectKey);
                 jedis.set(relKey, objectKey);
                 jedis.close();
@@ -100,8 +99,7 @@ public class PlanService {
                 objectKeysToDelete.add(key);
 
                 Jedis jedis = this.getJedisPool().getResource();
-                String relKey = jsonObject.get("objectId") + "_" + key;
-//                String relKey = objectType + "_" +jsonObject.get("objectId") + "_" + key;
+                String relKey = objectType + "_" +jsonObject.get("objectId") + "_" + key;
                 System.out.println(relKey + " :---: " + Arrays.toString(tempArrayObject));
                 jedis.set(relKey, Arrays.toString(tempArrayObject));
                 jedis.close();
@@ -114,14 +112,13 @@ public class PlanService {
         }
 
         // Save the Object in Redis
-        String objectKey = objectID;
-//        String objectKey = objectType + "_" + objectID;
+        String objectKey = objectType + "_" + objectID;
         System.out.println(objectKey + " :---: " + jsonObject.toString());
         Jedis jedis = this.getJedisPool().getResource();
         jedis.set(objectKey, jsonObject.toString());
         jedis.close();
 
-        return objectKey;
+        return objectID;
 
     }
 
@@ -151,7 +148,6 @@ public class PlanService {
        for(String relatedKey: relatedKeys){
 
            String partialObjectKey = relatedKey.substring(relatedKey.lastIndexOf('_')+1);
-
            jedis = jedisPool.getResource();
            String partialObjectDBKey = jedis.get(relatedKey);
            jedis.close();
