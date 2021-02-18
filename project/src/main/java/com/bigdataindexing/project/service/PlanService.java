@@ -43,7 +43,7 @@ public class PlanService {
         }
     }
 
-    public boolean checkIfPlanExists(String objectKey){
+    public boolean checkIfKeyExists(String objectKey){
 
         Jedis jedis = this.getJedisPool().getResource();
         String jsonString = jedis.get(objectKey);
@@ -53,6 +53,7 @@ public class PlanService {
         } else {
             return true;
         }
+
     }
 
     public String savePlan(JSONObject jsonObject, String objectType){
@@ -60,22 +61,23 @@ public class PlanService {
         // temp array of keys to remove from JSON Object
         ArrayList<String> objectKeysToDelete = new ArrayList<String>();
 
-        Iterator<String> keys = jsonObject.keys();
+        Iterator<String> iterator = jsonObject.keys();
         String objectID = (String) jsonObject.get("objectId");
 
-        while (keys.hasNext()){
-            String key = keys.next();
+        while (iterator.hasNext()){
+            String key = iterator.next();
             Object current = jsonObject.get(key);
 
             if(current instanceof  JSONObject){
 
                 JSONObject currentObject = (JSONObject) current;
-                String objectKey = this.savePlan(currentObject, key);
+                String objectKey = this.savePlan(currentObject, (String)currentObject.get("objectType"));
                 // remove this value from JSON Object, as it will be stored separately
                 objectKeysToDelete.add(key);
 
                 Jedis jedis = this.jedisPool.getResource();
                 String relKey = jsonObject.get("objectId") + "_" + key;
+//                String relKey = objectType + "_" + jsonObject.get("objectId") + "_" + key;
                 System.out.println(relKey + " :---: " + objectKey);
                 jedis.set(relKey, objectKey);
                 jedis.close();
@@ -99,6 +101,7 @@ public class PlanService {
 
                 Jedis jedis = this.getJedisPool().getResource();
                 String relKey = jsonObject.get("objectId") + "_" + key;
+//                String relKey = objectType + "_" +jsonObject.get("objectId") + "_" + key;
                 System.out.println(relKey + " :---: " + Arrays.toString(tempArrayObject));
                 jedis.set(relKey, Arrays.toString(tempArrayObject));
                 jedis.close();
@@ -112,6 +115,7 @@ public class PlanService {
 
         // Save the Object in Redis
         String objectKey = objectID;
+//        String objectKey = objectType + "_" + objectID;
         System.out.println(objectKey + " :---: " + jsonObject.toString());
         Jedis jedis = this.getJedisPool().getResource();
         jedis.set(objectKey, jsonObject.toString());
@@ -147,6 +151,7 @@ public class PlanService {
        for(String relatedKey: relatedKeys){
 
            String partialObjectKey = relatedKey.substring(relatedKey.lastIndexOf('_')+1);
+
            jedis = jedisPool.getResource();
            String partialObjectDBKey = jedis.get(relatedKey);
            jedis.close();
@@ -193,6 +198,7 @@ public class PlanService {
         // fetch additional relations for the object, if present
         jedis = jedisPool.getResource();
         Set<String> relatedKeys = jedis.keys(objectKey + "_*");
+        System.out.println(relatedKeys);
         jedis.close();
         for(String relatedKey: relatedKeys) {
 
@@ -200,7 +206,7 @@ public class PlanService {
 
             // fetch the id stored at partObjKey
             jedis = jedisPool.getResource();
-            String partialObjectDBKey = jedis.get(relatedKey);
+            String partialObjectDBKey = jedis.get(partialObjectKey);
             if(jedis.del(relatedKey) < 1) {
                 //deletion failed
                 return false;

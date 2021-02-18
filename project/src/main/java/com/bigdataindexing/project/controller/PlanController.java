@@ -1,18 +1,14 @@
 package com.bigdataindexing.project.controller;
 
 
-import com.bigdataindexing.project.exception.PlanAlreadyPresentException;
-import com.bigdataindexing.project.exception.PlanNotFoundException;
 import com.bigdataindexing.project.service.PlanService;
 import org.json.JSONTokener;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.json.JSONObject;
 
-import javax.servlet.http.HttpServletResponse;
 import java.net.URI;
 import java.net.URISyntaxException;
 
@@ -29,8 +25,9 @@ public class PlanController {
         JSONObject jsonPlan = new JSONObject(new JSONTokener(jsonData));
         this.planService.validatePlan(jsonPlan);
 
-        if(this.planService.checkIfPlanExists((String) jsonPlan.get("objectId"))){
-            throw new PlanAlreadyPresentException("Plan has already present!!");
+        if(this.planService.checkIfKeyExists((String) jsonPlan.get("objectId"))){
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new JSONObject().put("message", "Plan already exists!!").toString());
         }
 
         String objectID = this.planService.savePlan(jsonPlan, (String)jsonPlan.get("objectType"));
@@ -46,11 +43,12 @@ public class PlanController {
     @RequestMapping(method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE, value = "/plan/{objectID}")
     public ResponseEntity getPlan(@PathVariable String objectID){
 
-        if(!this.planService.checkIfPlanExists(objectID)){
-            throw new PlanNotFoundException("Plan not found!!");
+        if(!this.planService.checkIfKeyExists(objectID)){
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new JSONObject().put("message", "ObjectId does not exists!!").toString());
         }
 
-        JSONObject jsonObject = this.planService.getPlan(objectID);
+        JSONObject jsonObject = this.planService.getPlan( objectID);
 
         return ResponseEntity.ok().body(jsonObject.toString());
     }
@@ -58,11 +56,16 @@ public class PlanController {
     @RequestMapping(method =  RequestMethod.DELETE, produces = MediaType.APPLICATION_JSON_VALUE, value = "/plan/{objectID}")
     public ResponseEntity deletePlan(@PathVariable String objectID){
 
-        if(!this.planService.deletePlan(objectID)){
-            throw new PlanNotFoundException("Plan not found!!");
+        if(!this.planService.checkIfKeyExists(objectID)){
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new JSONObject().put("message", "ObjectId does not exists!!").toString());
         }
 
-        return ResponseEntity.noContent().build();
+        if(!this.planService.deletePlan(objectID)){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new JSONObject().put("message", "Some error was encountered while deleting!!").toString());
+        } else {
+            return ResponseEntity.noContent().build();
+        }
     }
-
 }
