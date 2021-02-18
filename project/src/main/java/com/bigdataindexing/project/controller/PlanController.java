@@ -30,7 +30,7 @@ public class PlanController {
                     .body(new JSONObject().put("message", "Plan already exists!!").toString());
         }
 
-        String objectID = this.planService.savePlan(jsonPlan, (String)jsonPlan.get("objectType"));
+        String objectID = this.planService.savePlan(jsonPlan);
 
         String message = "Plan Created Successfully!!";
         String responseBody = "{\n" +
@@ -49,7 +49,6 @@ public class PlanController {
         }
 
         JSONObject jsonObject = this.planService.getPlan( objectID);
-
         return ResponseEntity.ok().body(jsonObject.toString());
     }
 
@@ -61,11 +60,7 @@ public class PlanController {
                     .body(new JSONObject().put("message", "ObjectId does not exists!!").toString());
         }
 
-        if(!this.planService.deletePlan(objectID)){
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(new JSONObject().put("message", "Some error was encountered while deleting!!").toString());
-        } else {
-            return ResponseEntity.noContent().build();
-        }
+        this.planService.deletePlan(objectID);
+        return ResponseEntity.noContent().build();
     }
 }
