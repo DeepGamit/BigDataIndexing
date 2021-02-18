@@ -20,10 +20,4 @@ public class ProjectApplication {
     public static void main(String[] args) {
         SpringApplication.run(ProjectApplication.class, args);}
 
-    @Bean
-    public Filter filter(){
-        ShallowEtagHeaderFilter filter=new ShallowEtagHeaderFilter();
-        return filter;
-    }
-
 }

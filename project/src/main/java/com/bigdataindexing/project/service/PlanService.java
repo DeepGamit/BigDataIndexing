@@ -1,19 +1,8 @@
 package com.bigdataindexing.project.service;
 
-import com.bigdataindexing.project.controller.PlanController;
-import com.bigdataindexing.project.exception.InvalidInputException;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.everit.json.schema.Schema;
-import org.everit.json.schema.ValidationException;
-import org.everit.json.schema.loader.SchemaLoader;
-import org.json.JSONArray;
 import org.json.JSONObject;
-import org.json.JSONTokener;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
-
-import java.util.*;
 
 public class PlanService {
 
@@ -26,22 +15,6 @@ public class PlanService {
         return this.jedisPool;
     }
 
-    // Validate Plan against the Plan Schema
-    public void validatePlan(JSONObject plan) {
-
-        JSONObject jsonSchema = new JSONObject(
-                new JSONTokener(PlanController.class.getResourceAsStream("/planSchema.json")));
-
-        Schema planSchema = SchemaLoader.load(jsonSchema);
-
-        try {
-            planSchema.validate(plan);
-        } catch (ValidationException e){
-            e.getCausingExceptions().stream().map(ValidationException::getMessage).forEach(System.out::println);
-            throw new InvalidInputException("Invalid Input! Error: " + e.getMessage());
-
-        }
-    }
 
     public boolean checkIfKeyExists(String objectKey) {
 
