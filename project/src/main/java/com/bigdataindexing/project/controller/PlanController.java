@@ -13,8 +13,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.json.JSONObject;
 import javax.validation.Valid;
-
-import javax.servlet.http.HttpServletResponse;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
@@ -71,7 +69,14 @@ public class PlanController {
             JSONObject jsonObject = this.planService.getPlan(objectID);
             String etag = eTagManager.getETag(jsonObject);
 
-            List<String> ifNotMatch = requestHeaders.getIfNoneMatch();
+            List<String> ifNotMatch;
+            try{
+                ifNotMatch = requestHeaders.getIfNoneMatch();
+            } catch (Exception e){
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).
+                        body(new JSONObject().put("error", "ETag value is invalid! If-None-Match value should be string.").toString());
+            }
+
             if(!eTagManager.verifyETag(jsonObject, ifNotMatch)){
                 return ResponseEntity.ok().eTag(etag).body(jsonObject.toString());
             } else {

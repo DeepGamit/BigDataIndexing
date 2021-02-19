@@ -15,7 +15,6 @@ public class PlanService {
         return this.jedisPool;
     }
 
-
     public boolean checkIfKeyExists(String objectKey) {
 
         Jedis jedis = this.getJedisPool().getResource();
