@@ -54,7 +54,7 @@ public class PlanController {
         response.put("objectId", objectID);
         response.put("message", "Plan Created Successfully!!");
 
-        return ResponseEntity.created(new URI(jsonPlan.get("objectId").toString())).eTag(etag)
+        return ResponseEntity.created(new URI("/plan/" +jsonPlan.get("objectId").toString())).eTag(etag)
                 .body(response.toString());
     }
 
