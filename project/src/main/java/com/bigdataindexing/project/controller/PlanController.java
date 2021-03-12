@@ -1,6 +1,7 @@
 package com.bigdataindexing.project.controller;
 
 
+import com.bigdataindexing.project.service.AuthorizeService;
 import com.bigdataindexing.project.service.ETagManager;
 import com.bigdataindexing.project.service.PlanService;
 import com.bigdataindexing.project.validator.JsonValidator;
@@ -13,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.json.JSONObject;
 import javax.validation.Valid;
+import javax.ws.rs.BadRequestException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -24,11 +26,34 @@ import java.util.Map;
 public class PlanController {
 
     PlanService planService = new PlanService();
-    ETagManager eTagManager = new ETagManager();
+    AuthorizeService authorizeService = new AuthorizeService();
     JsonValidator jsonValidator = new JsonValidator();
 
+
+    @RequestMapping(method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE, value = "/token")
+    public ResponseEntity getToken(){
+
+        String token;
+        try {
+            token = authorizeService.generateToken();
+        } catch (Exception e) {
+            throw new BadRequestException(e.getMessage());
+        }
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(new JSONObject().put("token", token).toString());
+
+    }
+
     @RequestMapping(method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_VALUE, value = "/plan")
-    public ResponseEntity createPlan(@Valid @RequestBody(required = false) String jsonData) throws URISyntaxException {
+    public ResponseEntity createPlan(@Valid @RequestBody(required = false) String jsonData,
+                                     @RequestHeader HttpHeaders requestHeaders) throws URISyntaxException {
+
+        String authorization = requestHeaders.getFirst("Authorization");
+        String result = authorizeService.authorize(authorization);
+        if(result != "Valid Token"){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new JSONObject().put("Error: ", result).toString());
+        }
 
         if (jsonData == null || jsonData.isEmpty()){
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).
@@ -65,10 +90,17 @@ public class PlanController {
     public ResponseEntity getPlan(@PathVariable String objectID, @PathVariable String objectType,
                                         @RequestHeader HttpHeaders requestHeaders){
 
+        String authorization = requestHeaders.getFirst("Authorization");
+        String result = authorizeService.authorize(authorization);
+        if(result != "Valid Token"){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new JSONObject().put("Error: ", result).toString());
+        }
+
         String key = objectType + ":" + objectID;
         if(!this.planService.checkIfKeyExists(key)){
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new JSONObject().put("message", "No such object exists!!").toString());
+                    .body(new JSONObject().put("message", "ObjectId does not exists!!").toString());
         } else {
 
             String ifNotMatch;
@@ -97,12 +129,31 @@ public class PlanController {
     }
 
     @RequestMapping(method =  RequestMethod.DELETE, produces = MediaType.APPLICATION_JSON_VALUE, value = "/{objectType}/{objectID}")
-    public ResponseEntity deletePlan(@PathVariable String objectID,  @PathVariable String objectType){
+    public ResponseEntity deletePlan(@RequestHeader HttpHeaders requestHeaders,
+                                        @PathVariable String objectID,  @PathVariable String objectType){
+
+        String authorization = requestHeaders.getFirst("Authorization");
+        String result = authorizeService.authorize(authorization);
+        if(result != "Valid Token"){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new JSONObject().put("Error: ", result).toString());
+        }
 
         String key = objectType + ":" + objectID;
         if(!this.planService.checkIfKeyExists(key)){
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new JSONObject().put("message", "ObjectId does not exists!!").toString());
+        }
+
+
+        String actualEtag = planService.getEtag(key);
+        String eTag = requestHeaders.getFirst("If-Match");
+        if (eTag == null || eTag.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new JSONObject().put("message", "eTag not provided in request!!").toString());
+        }
+        if (eTag != null && !eTag.equals(actualEtag)) {
+            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).eTag(actualEtag).build();
         }
 
         this.planService.deletePlan(key);
@@ -112,6 +163,13 @@ public class PlanController {
     @RequestMapping(method = RequestMethod.PUT, produces = MediaType.APPLICATION_JSON_VALUE, path = "/plan/{objectID}")
     public ResponseEntity updatePlan( @RequestHeader HttpHeaders requestHeaders, @Valid @RequestBody(required = false) String jsonData,
                                              @PathVariable String objectID) throws IOException {
+
+        String authorization = requestHeaders.getFirst("Authorization");
+        String result = authorizeService.authorize(authorization);
+        if(result != "Valid Token"){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new JSONObject().put("Error: ", result).toString());
+        }
 
         JSONObject jsonPlan = new JSONObject(jsonData);
         String key = "plan:" + objectID;
@@ -123,6 +181,10 @@ public class PlanController {
 
         String actualEtag = planService.getEtag(key);
         String eTag = requestHeaders.getFirst("If-Match");
+        if (eTag == null || eTag.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new JSONObject().put("message", "eTag not provided in request!!").toString());
+        }
         if (eTag != null && !eTag.equals(actualEtag)) {
             return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).eTag(actualEtag).build();
         }
@@ -142,19 +204,36 @@ public class PlanController {
     }
 
     @RequestMapping(method =  RequestMethod.PATCH, produces = MediaType.APPLICATION_JSON_VALUE, path = "/plan/{objectID}")
-    public ResponseEntity<Object> patchPlan(@RequestHeader HttpHeaders headers, @Valid @RequestBody(required = false) String jsonData,
+    public ResponseEntity<Object> patchPlan(@RequestHeader HttpHeaders requestHeaders, @Valid @RequestBody(required = false) String jsonData,
                                             @PathVariable String objectID) throws IOException {
+
+        String authorization = requestHeaders.getFirst("Authorization");
+        String result = authorizeService.authorize(authorization);
+        if(result != "Valid Token"){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new JSONObject().put("Error: ", result).toString());
+        }
 
         JSONObject jsonPlan = new JSONObject(jsonData);
         String key = "plan:" + objectID;
         if (!planService.checkIfKeyExists(key)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new JSONObject().put("message", "No such object exists!!").toString());
+                    .body(new JSONObject().put("message", "ObjectId does not exists!!").toString());
         }
 
-        String etag =  this.planService.savePlan(jsonPlan, key);
+        String actualEtag = planService.getEtag(key);
+        String eTag = requestHeaders.getFirst("If-Match");
+        if (eTag == null || eTag.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new JSONObject().put("message", "eTag not provided in request!!").toString());
+        }
+        if (eTag != null && !eTag.equals(actualEtag)) {
+            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).eTag(actualEtag).build();
+        }
 
-        return ResponseEntity.ok().eTag(etag)
+        String newEtag =  this.planService.savePlan(jsonPlan, key);
+
+        return ResponseEntity.ok().eTag(newEtag)
                 .body(new JSONObject().put("message: ", "Resource updated successfully!!").toString());
     }
 

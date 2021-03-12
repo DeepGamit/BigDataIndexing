@@ -129,12 +129,17 @@ public class PlanService {
     private Map<String, Object> getOrDeleteData(String redisKey, Map<String, Object> outputMap, boolean isDelete) {
         Jedis jedis = this.getJedisPool().getResource();
         Set<String> keys = jedis.keys(redisKey + "*");
+        jedis.close();
         for (String key : keys) {
             if (key.equals(redisKey)) {
                 if (isDelete) {
+                    jedis = this.getJedisPool().getResource();
                     jedis.del(new String[] {key});
+                    jedis.close();
                 } else {
+                    jedis = this.getJedisPool().getResource();
                     Map<String, String> val =  jedis.hgetAll(key);
+                    jedis.close();
                     for (String name : val.keySet()) {
                         if (!name.equalsIgnoreCase("eTag")) {
                             outputMap.put(name,
@@ -146,9 +151,11 @@ public class PlanService {
             } else {
                 String newStr = key.substring((redisKey + ":").length());
                 System.out.println("Key to be serched :" +key+"--------------"+newStr);
+                jedis = this.getJedisPool().getResource();
                 Set<String> members = jedis.smembers(key);
-                System.out.println(members);
-                if (members.size() > 1) {
+                jedis.close();
+                System.out.println(members + ":" + members.size());
+                if (members.size() >= 1) {
                     List<Object> listObj = new ArrayList<Object>();
                     for (String member : members) {
                         if (isDelete) {
@@ -160,17 +167,24 @@ public class PlanService {
                         }
                     }
                     if (isDelete) {
+                        jedis = this.getJedisPool().getResource();
                         jedis.del(new String[] {key});
+                        jedis.close();
                     } else {
                         outputMap.put(newStr, listObj);
                     }
 
                 } else {
                     if (isDelete) {
+                        jedis = this.getJedisPool().getResource();
                         jedis.del(new String[]{members.iterator().next(), key});
+                        jedis.close();
                     } else {
+                        jedis = this.getJedisPool().getResource();
                         Map<String, String> val = jedis.hgetAll(members.iterator().next());
+                        jedis.close();
                         Map<String, Object> newMap = new HashMap<String, Object>();
+                        System.out.println(val);
                         for (String name : val.keySet()) {
                             newMap.put(name,
                                     isStringDouble(val.get(name)) ? Double.parseDouble(val.get(name)) : val.get(name));

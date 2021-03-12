@@ -49,6 +49,14 @@
             <type>jar</type>
         </dependency>
 
+        <!-- JWT dependencies -->
+
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+            <version>8.8</version>
+        </dependency>
+
 
         <!-- Spring Boot dependencies -->
         <dependency>
