@@ -53,12 +53,12 @@ public class PlanController {
     public ResponseEntity createPlan(@Valid @RequestBody(required = false) String jsonData,
                                      @RequestHeader HttpHeaders requestHeaders) throws URISyntaxException {
 
-//        String authorization = requestHeaders.getFirst("Authorization");
-//        String result = authorizeService.authorize(authorization);
-//        if(result != "Valid Token"){
-//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-//                    .body(new JSONObject().put("Error: ", result).toString());
-//        }
+        String authorization = requestHeaders.getFirst("Authorization");
+        String result = authorizeService.authorize(authorization);
+        if(result != "Valid Token"){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new JSONObject().put("Error: ", result).toString());
+        }
 
         if (jsonData == null || jsonData.isEmpty()){
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).
@@ -95,12 +95,12 @@ public class PlanController {
     public ResponseEntity getPlan(@PathVariable String objectID, @PathVariable String objectType,
                                         @RequestHeader HttpHeaders requestHeaders){
 
-//        String authorization = requestHeaders.getFirst("Authorization");
-//        String result = authorizeService.authorize(authorization);
-//        if(result != "Valid Token"){
-//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-//                    .body(new JSONObject().put("Error: ", result).toString());
-//        }
+        String authorization = requestHeaders.getFirst("Authorization");
+        String result = authorizeService.authorize(authorization);
+        if(result != "Valid Token"){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new JSONObject().put("Error: ", result).toString());
+        }
 
         String key = objectType + ":" + objectID;
         if(!this.planService.checkIfKeyExists(key)){
@@ -137,12 +137,12 @@ public class PlanController {
     public ResponseEntity deletePlan(@RequestHeader HttpHeaders requestHeaders,
                                         @PathVariable String objectID,  @PathVariable String objectType){
 
-//        String authorization = requestHeaders.getFirst("Authorization");
-//        String result = authorizeService.authorize(authorization);
-//        if(result != "Valid Token"){
-//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-//                    .body(new JSONObject().put("Error: ", result).toString());
-//        }
+        String authorization = requestHeaders.getFirst("Authorization");
+        String result = authorizeService.authorize(authorization);
+        if(result != "Valid Token"){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new JSONObject().put("Error: ", result).toString());
+        }
 
         String key = objectType + ":" + objectID;
         if(!this.planService.checkIfKeyExists(key)){
@@ -169,12 +169,12 @@ public class PlanController {
     public ResponseEntity updatePlan( @RequestHeader HttpHeaders requestHeaders, @Valid @RequestBody(required = false) String jsonData,
                                              @PathVariable String objectID) throws IOException {
 
-//        String authorization = requestHeaders.getFirst("Authorization");
-//        String result = authorizeService.authorize(authorization);
-//        if(result != "Valid Token"){
-//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-//                    .body(new JSONObject().put("Error: ", result).toString());
-//        }
+        String authorization = requestHeaders.getFirst("Authorization");
+        String result = authorizeService.authorize(authorization);
+        if(result != "Valid Token"){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new JSONObject().put("Error: ", result).toString());
+        }
 
         if (jsonData == null || jsonData.isEmpty()){
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).
@@ -217,12 +217,12 @@ public class PlanController {
     public ResponseEntity<Object> patchPlan(@RequestHeader HttpHeaders requestHeaders, @Valid @RequestBody(required = false) String jsonData,
                                             @PathVariable String objectID) throws IOException {
 
-//        String authorization = requestHeaders.getFirst("Authorization");
-//        String result = authorizeService.authorize(authorization);
-//        if(result != "Valid Token"){
-//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-//                    .body(new JSONObject().put("Error: ", result).toString());
-//        }
+        String authorization = requestHeaders.getFirst("Authorization");
+        String result = authorizeService.authorize(authorization);
+        if(result != "Valid Token"){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new JSONObject().put("Error: ", result).toString());
+        }
 
         if (jsonData == null || jsonData.isEmpty()){
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).
@@ -247,7 +247,16 @@ public class PlanController {
                     .body(new JSONObject().put("message", "Plan has been updated by another user!!").toString());
         }
 
-        String newEtag =  this.planService.savePlan(jsonPlan, key);
+        JSONObject mergedPlan = this.planService.mergeData(jsonPlan, key);
+
+        try {
+            jsonValidator.validateJSON(mergedPlan);
+        } catch(ValidationException ex){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).
+                    body(new JSONObject().put("error",ex.getAllMessages()).toString());
+        }
+
+        String newEtag =  this.planService.savePlan(mergedPlan, key);
 
         return ResponseEntity.ok().eTag(newEtag)
                 .body(new JSONObject().put("message: ", "Resource updated successfully!!").toString());

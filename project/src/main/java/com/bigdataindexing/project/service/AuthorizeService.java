@@ -56,10 +56,9 @@ public class AuthorizeService {
 
         String token = authorization.split(" ")[1];
 
-        try {
-            SignedJWT signedJWT = SignedJWT.parse(token);
-
             try {
+
+                SignedJWT signedJWT = SignedJWT.parse(token);
                 JWSVerifier verifier = new RSASSAVerifier(this.rsaPublicJWK);
 
                 // token is not valid
@@ -73,12 +72,9 @@ public class AuthorizeService {
                 if(new Date().after(expirationTime)) {
                     return "Token has expired";
                 }
-            } catch (JOSEException e){
+            } catch (JOSEException | ParseException e ){
                 return "Invalid Token";
             }
-        } catch (ParseException e) {
-            return "Invalid Token";
-        }
 
         return "Valid Token";
     }

@@ -2,10 +2,8 @@ package com.bigdataindexing.project.service;
 
 import org.json.JSONObject;
 import org.json.JSONArray;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
 
 import java.util.*;
 
@@ -106,13 +104,77 @@ public class PlanService {
         return list;
     }
 
-    private boolean isStringDouble(String s) {
+    private boolean isStringInt(String s) {
         try {
-            Double.parseDouble(s);
+            Integer.parseInt(s);
             return true;
         } catch (NumberFormatException ex) {
             return false;
         }
+    }
+
+    public JSONObject mergeData(JSONObject jsonObject, String redisKey){
+
+       JSONObject savedObject = new JSONObject(this.getPlan(redisKey));
+        if(savedObject == null){
+            return null;
+        }
+
+        Iterator<String> iterator = jsonObject.keys();
+        while (iterator.hasNext()){
+
+            String jsonKey = iterator.next();
+            Object jsonValue = jsonObject.get(jsonKey);
+
+            if(savedObject.get(jsonKey) == null){
+                savedObject.put(jsonKey, jsonValue);
+            } else {
+
+                if (jsonValue instanceof JSONObject) {
+                    JSONObject jsonValueObject = (JSONObject)jsonValue;
+                    String jsonObjKey = jsonKey + ":" + jsonValueObject.get("objectId");
+                    if (((JSONObject)savedObject.get(jsonKey)).get("objectId").equals(jsonValueObject.get("objectId"))) {
+                        savedObject.put(jsonKey, jsonValue);
+                    } else {
+                        JSONObject updatedJsonValue = this.mergeData(jsonValueObject, jsonObjKey);
+                        savedObject.put(jsonKey, updatedJsonValue);
+                    }
+                } else if (jsonValue instanceof JSONArray) {
+                    JSONArray jsonValueArray = (JSONArray) jsonValue;
+                    JSONArray savedJSONArray = savedObject.getJSONArray(jsonKey);
+                    for (int i = 0; i < jsonValueArray.length(); i++) {
+                        JSONObject arrayItem = (JSONObject)jsonValueArray.get(i);
+                        //check if objectId already exists in savedJSONArray
+                        int index = getIndexOfObjectId(savedJSONArray, (String)arrayItem.get("objectId"));
+                        if(index >= 0) {
+                            savedJSONArray.remove(index);
+                        }
+                        savedJSONArray.put(arrayItem);
+                    }
+                    savedObject.put(jsonKey, savedJSONArray);
+                } else {
+                    savedObject.put(jsonKey, jsonValue);
+                }
+
+            }
+
+        }
+
+        return  savedObject;
+    }
+
+    private int getIndexOfObjectId(JSONArray array, String objectId) {
+        int i = -1;
+
+        for (i = 0; i < array.length(); i++) {
+            JSONObject arrayObj = (JSONObject)array.get(i);
+            String itemId = (String)arrayObj.get("objectId");
+            if (objectId.equals(itemId)){
+                return i;
+            }
+        }
+
+        return i;
     }
 
 
@@ -124,26 +186,26 @@ public class PlanService {
         for (String key : keys) {
             if (key.equals(redisKey)) {
                 if (isDelete) {
-                    jedis.del(new String[] {key});
+                    jedis.del(new String[]{key});
                     jedis.close();
                 } else {
-                    Map<String, String> val =  jedis.hgetAll(key);
+                    Map<String, String> val = jedis.hgetAll(key);
                     jedis.close();
                     for (String name : val.keySet()) {
                         if (!name.equalsIgnoreCase("eTag")) {
                             outputMap.put(name,
-                                    isStringDouble(val.get(name)) ? Double.parseDouble(val.get(name)) : val.get(name));
+                                    isStringInt(val.get(name)) ? Integer.parseInt(val.get(name)) : val.get(name));
                         }
                     }
                 }
 
             } else {
                 String newStr = key.substring((redisKey + ":").length());
-                System.out.println("Key to be serched :" +key+"--------------"+newStr);
+                System.out.println("Key to be serched :" + key + "--------------" + newStr);
                 Set<String> members = jedis.smembers(key);
                 jedis.close();
                 System.out.println("Members" + ":" + members);
-                if (members.size() >= 1) {
+                if (members.size() > 1) {
                     List<Object> listObj = new ArrayList<Object>();
                     for (String member : members) {
                         if (isDelete) {
@@ -155,7 +217,7 @@ public class PlanService {
                         }
                     }
                     if (isDelete) {
-                        jedis.del(new String[] {key});
+                        jedis.del(new String[]{key});
                         jedis.close();
                     } else {
                         outputMap.put(newStr, listObj);
@@ -171,14 +233,13 @@ public class PlanService {
                         Map<String, Object> newMap = new HashMap<String, Object>();
                         for (String name : val.keySet()) {
                             newMap.put(name,
-                                    isStringDouble(val.get(name)) ? Double.parseDouble(val.get(name)) : val.get(name));
+                                    isStringInt(val.get(name)) ? Integer.parseInt(val.get(name)) : val.get(name));
                         }
                         outputMap.put(newStr, newMap);
                     }
                 }
             }
         }
-
         return outputMap;
     }
 }
