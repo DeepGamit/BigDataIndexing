@@ -5,7 +5,9 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.List;
 import org.json.JSONObject;
+import org.springframework.stereotype.Service;
 
+@Service
 public class ETagManager {
 
     public String getETag(JSONObject json) {

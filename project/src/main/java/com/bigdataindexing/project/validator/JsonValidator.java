@@ -6,7 +6,9 @@ import org.everit.json.schema.ValidationException;
 import org.everit.json.schema.loader.SchemaLoader;
 import org.json.JSONObject;
 import org.json.JSONTokener;
+import org.springframework.stereotype.Service;
 
+@Service
 public class JsonValidator {
     public void validateJSON(JSONObject jsonObject) throws ValidationException {
 

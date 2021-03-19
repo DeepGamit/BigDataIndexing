@@ -2,40 +2,33 @@ package com.bigdataindexing.project.service;
 
 import org.json.JSONObject;
 import org.json.JSONArray;
+import org.springframework.stereotype.Service;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
 
 import java.util.*;
 
+@Service
 public class PlanService {
 
-    private JedisPool jedisPool;
-    ETagManager eTagManager = new ETagManager();
+    private Jedis jedis;
+    ETagManager eTagManager;
 
-    private JedisPool getJedisPool() {
-        if (this.jedisPool == null) {
-            this.jedisPool = new JedisPool();
-            System.out.println(this.jedisPool);
-        }
-        return this.jedisPool;
+    public PlanService(Jedis jedis, ETagManager eTagManager) {
+        this.jedis = jedis;
+        this.eTagManager = eTagManager;
     }
 
     public boolean checkIfKeyExists(String objectKey) {
-
-        Jedis jedis = this.getJedisPool().getResource();
-        jedis.close();
         return jedis.exists(objectKey);
 
     }
 
     public String getEtag(String key) {
-        Jedis jedis = this.getJedisPool().getResource();
         return jedis.hget(key, "eTag");
     }
 
     public String setEtag(String key, JSONObject jsonObject){
         String eTag = eTagManager.getETag(jsonObject);
-        Jedis jedis = this.getJedisPool().getResource();
         jedis.hset(key, "eTag", eTag);
         return eTag;
     }
@@ -64,9 +57,7 @@ public class PlanService {
 
         while (iterator.hasNext()){
 
-            System.out.println(jsonObject.get("objectType") + ":" + jsonObject );
             String redisKey = jsonObject.get("objectType") + ":" + jsonObject.get("objectId");
-            System.out.println(redisKey);
             String key = iterator.next();
             Object value = jsonObject.get(key);
 
@@ -74,7 +65,6 @@ public class PlanService {
 
                 value = convertToMap((JSONObject) value);
                 HashMap<String, Map<String, Object>> val = (HashMap<String, Map<String, Object>>) value;
-                Jedis jedis = this.getJedisPool().getResource();
                 jedis.sadd(redisKey + ":" + key, val.entrySet().iterator().next().getKey());
                 jedis.close();
 
@@ -82,14 +72,12 @@ public class PlanService {
                 value = convertToList((JSONArray) value);
                 for (HashMap<String, HashMap<String, Object>> entry : (List<HashMap<String, HashMap<String, Object>>>) value) {
                     for (String listKey : entry.keySet()) {
-                        Jedis jedis = this.getJedisPool().getResource();
                         jedis.sadd(redisKey + ":" + key, listKey);
                         jedis.close();
                         System.out.println(redisKey + ":" + key + " : " + listKey);
                     }
                 }
             } else {
-                Jedis jedis = this.getJedisPool().getResource();
                 jedis.hset(redisKey, key, value.toString());
                 jedis.close();
                 valueMap.put(key, value);
@@ -116,46 +104,108 @@ public class PlanService {
         return list;
     }
 
-    private boolean isStringDouble(String s) {
+    private boolean isStringInt(String s) {
         try {
-            Double.parseDouble(s);
+            Integer.parseInt(s);
             return true;
         } catch (NumberFormatException ex) {
             return false;
         }
     }
 
+    public JSONObject mergeData(JSONObject jsonObject, String redisKey){
+
+       JSONObject savedObject = new JSONObject(this.getPlan(redisKey));
+        if(savedObject == null){
+            return null;
+        }
+
+        Iterator<String> iterator = jsonObject.keys();
+        while (iterator.hasNext()){
+
+            String jsonKey = iterator.next();
+            Object jsonValue = jsonObject.get(jsonKey);
+
+            if(savedObject.get(jsonKey) == null){
+                savedObject.put(jsonKey, jsonValue);
+            } else {
+
+                if (jsonValue instanceof JSONObject) {
+                    JSONObject jsonValueObject = (JSONObject)jsonValue;
+                    String jsonObjKey = jsonKey + ":" + jsonValueObject.get("objectId");
+                    if (((JSONObject)savedObject.get(jsonKey)).get("objectId").equals(jsonValueObject.get("objectId"))) {
+                        savedObject.put(jsonKey, jsonValue);
+                    } else {
+                        JSONObject updatedJsonValue = this.mergeData(jsonValueObject, jsonObjKey);
+                        savedObject.put(jsonKey, updatedJsonValue);
+                    }
+                } else if (jsonValue instanceof JSONArray) {
+                    JSONArray jsonValueArray = (JSONArray) jsonValue;
+                    JSONArray savedJSONArray = savedObject.getJSONArray(jsonKey);
+                    for (int i = 0; i < jsonValueArray.length(); i++) {
+                        JSONObject arrayItem = (JSONObject)jsonValueArray.get(i);
+                        //check if objectId already exists in savedJSONArray
+                        int index = getIndexOfObjectId(savedJSONArray, (String)arrayItem.get("objectId"));
+                        if(index >= 0) {
+                            savedJSONArray.remove(index);
+                        }
+                        savedJSONArray.put(arrayItem);
+                    }
+                    savedObject.put(jsonKey, savedJSONArray);
+                } else {
+                    savedObject.put(jsonKey, jsonValue);
+                }
+
+            }
+
+        }
+
+        return  savedObject;
+    }
+
+    private int getIndexOfObjectId(JSONArray array, String objectId) {
+        int i = -1;
+
+        for (i = 0; i < array.length(); i++) {
+            JSONObject arrayObj = (JSONObject)array.get(i);
+            String itemId = (String)arrayObj.get("objectId");
+            if (objectId.equals(itemId)){
+                return i;
+            }
+        }
+
+        return i;
+    }
+
 
     private Map<String, Object> getOrDeleteData(String redisKey, Map<String, Object> outputMap, boolean isDelete) {
-        Jedis jedis = this.getJedisPool().getResource();
-        Set<String> keys = jedis.keys(redisKey + "*");
+        Set<String> keys = jedis.keys(redisKey + ":*");
+        keys.add(redisKey);
+        System.out.println("Keys for "+redisKey+": " + keys);
         jedis.close();
         for (String key : keys) {
             if (key.equals(redisKey)) {
                 if (isDelete) {
-                    jedis = this.getJedisPool().getResource();
-                    jedis.del(new String[] {key});
+                    jedis.del(new String[]{key});
                     jedis.close();
                 } else {
-                    jedis = this.getJedisPool().getResource();
-                    Map<String, String> val =  jedis.hgetAll(key);
+                    Map<String, String> val = jedis.hgetAll(key);
                     jedis.close();
                     for (String name : val.keySet()) {
                         if (!name.equalsIgnoreCase("eTag")) {
                             outputMap.put(name,
-                                    isStringDouble(val.get(name)) ? Double.parseDouble(val.get(name)) : val.get(name));
+                                    isStringInt(val.get(name)) ? Integer.parseInt(val.get(name)) : val.get(name));
                         }
                     }
                 }
 
             } else {
                 String newStr = key.substring((redisKey + ":").length());
-                System.out.println("Key to be serched :" +key+"--------------"+newStr);
-                jedis = this.getJedisPool().getResource();
+                System.out.println("Key to be serched :" + key + "--------------" + newStr);
                 Set<String> members = jedis.smembers(key);
                 jedis.close();
-                System.out.println(members + ":" + members.size());
-                if (members.size() >= 1) {
+                System.out.println("Members" + ":" + members);
+                if (members.size() > 1) {
                     List<Object> listObj = new ArrayList<Object>();
                     for (String member : members) {
                         if (isDelete) {
@@ -167,8 +217,7 @@ public class PlanService {
                         }
                     }
                     if (isDelete) {
-                        jedis = this.getJedisPool().getResource();
-                        jedis.del(new String[] {key});
+                        jedis.del(new String[]{key});
                         jedis.close();
                     } else {
                         outputMap.put(newStr, listObj);
@@ -176,18 +225,15 @@ public class PlanService {
 
                 } else {
                     if (isDelete) {
-                        jedis = this.getJedisPool().getResource();
                         jedis.del(new String[]{members.iterator().next(), key});
                         jedis.close();
                     } else {
-                        jedis = this.getJedisPool().getResource();
                         Map<String, String> val = jedis.hgetAll(members.iterator().next());
                         jedis.close();
                         Map<String, Object> newMap = new HashMap<String, Object>();
-                        System.out.println(val);
                         for (String name : val.keySet()) {
                             newMap.put(name,
-                                    isStringDouble(val.get(name)) ? Double.parseDouble(val.get(name)) : val.get(name));
+                                    isStringInt(val.get(name)) ? Integer.parseInt(val.get(name)) : val.get(name));
                         }
                         outputMap.put(newStr, newMap);
                     }
@@ -196,5 +242,4 @@ public class PlanService {
         }
         return outputMap;
     }
-
 }

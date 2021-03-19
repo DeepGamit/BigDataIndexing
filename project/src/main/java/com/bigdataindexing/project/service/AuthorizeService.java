@@ -7,10 +7,12 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import org.springframework.stereotype.Service;
 
 import java.text.ParseException;
 import java.util.Date;
 
+@Service
 public class AuthorizeService {
 
     private RSAKey rsaPublicJWK;
@@ -29,7 +31,7 @@ public class AuthorizeService {
 
         // Prepare JWT with claims set
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                .expirationTime(new Date(new Date().getTime() + 300 * 1000))
+                .expirationTime(new Date(new Date().getTime() + 3000 * 1000))
                 .build();
 
         SignedJWT signedJWT = new SignedJWT(
@@ -54,10 +56,9 @@ public class AuthorizeService {
 
         String token = authorization.split(" ")[1];
 
-        try {
-            SignedJWT signedJWT = SignedJWT.parse(token);
-
             try {
+
+                SignedJWT signedJWT = SignedJWT.parse(token);
                 JWSVerifier verifier = new RSASSAVerifier(this.rsaPublicJWK);
 
                 // token is not valid
@@ -71,12 +72,9 @@ public class AuthorizeService {
                 if(new Date().after(expirationTime)) {
                     return "Token has expired";
                 }
-            } catch (JOSEException e){
+            } catch (JOSEException | ParseException e ){
                 return "Invalid Token";
             }
-        } catch (ParseException e) {
-            return "Invalid Token";
-        }
 
         return "Valid Token";
     }

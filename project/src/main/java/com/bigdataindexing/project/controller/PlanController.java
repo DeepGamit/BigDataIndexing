@@ -2,11 +2,9 @@ package com.bigdataindexing.project.controller;
 
 
 import com.bigdataindexing.project.service.AuthorizeService;
-import com.bigdataindexing.project.service.ETagManager;
 import com.bigdataindexing.project.service.PlanService;
 import com.bigdataindexing.project.validator.JsonValidator;
 import org.everit.json.schema.ValidationException;
-import org.json.JSONTokener;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -18,16 +16,23 @@ import javax.ws.rs.BadRequestException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.List;
 import java.util.Map;
 
 
 @RestController
 public class PlanController {
 
-    PlanService planService = new PlanService();
-    AuthorizeService authorizeService = new AuthorizeService();
-    JsonValidator jsonValidator = new JsonValidator();
+    PlanService planService;
+    AuthorizeService authorizeService;
+    JsonValidator jsonValidator;
+
+    public PlanController(PlanService planService, AuthorizeService authorizeService, JsonValidator jsonValidator) {
+
+        this.planService = planService;
+        this.authorizeService = authorizeService;
+        this.jsonValidator = jsonValidator;
+
+    }
 
 
     @RequestMapping(method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE, value = "/token")
@@ -171,6 +176,11 @@ public class PlanController {
                     .body(new JSONObject().put("Error: ", result).toString());
         }
 
+        if (jsonData == null || jsonData.isEmpty()){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).
+                    body(new JSONObject().put("error", "Request body is Empty. Kindly provide the JSON").toString());
+        }
+
         JSONObject jsonPlan = new JSONObject(jsonData);
         String key = "plan:" + objectID;
 
@@ -200,7 +210,7 @@ public class PlanController {
         String newEtag = this.planService.savePlan(jsonPlan, key);
 
         return ResponseEntity.ok().eTag(newEtag)
-                .body(new JSONObject().put("message: ", "Resource updated successfully").toString());
+                .body(new JSONObject().put("message: ", "Resource updated successfully!!").toString());
     }
 
     @RequestMapping(method =  RequestMethod.PATCH, produces = MediaType.APPLICATION_JSON_VALUE, path = "/plan/{objectID}")
@@ -212,6 +222,11 @@ public class PlanController {
         if(result != "Valid Token"){
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new JSONObject().put("Error: ", result).toString());
+        }
+
+        if (jsonData == null || jsonData.isEmpty()){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).
+                    body(new JSONObject().put("error", "Request body is Empty. Kindly provide the JSON").toString());
         }
 
         JSONObject jsonPlan = new JSONObject(jsonData);
@@ -228,10 +243,20 @@ public class PlanController {
                     .body(new JSONObject().put("message", "eTag not provided in request!!").toString());
         }
         if (eTag != null && !eTag.equals(actualEtag)) {
-            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).eTag(actualEtag).build();
+            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).eTag(actualEtag)
+                    .body(new JSONObject().put("message", "Plan has been updated by another user!!").toString());
         }
 
-        String newEtag =  this.planService.savePlan(jsonPlan, key);
+        JSONObject mergedPlan = this.planService.mergeData(jsonPlan, key);
+
+        try {
+            jsonValidator.validateJSON(mergedPlan);
+        } catch(ValidationException ex){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).
+                    body(new JSONObject().put("error",ex.getAllMessages()).toString());
+        }
+
+        String newEtag =  this.planService.savePlan(mergedPlan, key);
 
         return ResponseEntity.ok().eTag(newEtag)
                 .body(new JSONObject().put("message: ", "Resource updated successfully!!").toString());
