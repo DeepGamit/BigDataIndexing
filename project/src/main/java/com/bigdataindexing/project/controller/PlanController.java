@@ -158,7 +158,8 @@ public class PlanController {
                     .body(new JSONObject().put("message", "eTag not provided in request!!").toString());
         }
         if (eTag != null && !eTag.equals(actualEtag)) {
-            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).eTag(actualEtag).build();
+            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).eTag(actualEtag)
+                    .body(new JSONObject().put("message", "Plan has been updated by another user!!").toString());
         }
 
         this.planService.deletePlan(key);
@@ -196,7 +197,8 @@ public class PlanController {
                     .body(new JSONObject().put("message", "eTag not provided in request!!").toString());
         }
         if (eTag != null && !eTag.equals(actualEtag)) {
-            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).eTag(actualEtag).build();
+            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).eTag(actualEtag)
+                    .body(new JSONObject().put("message", "Plan has been updated by another user!!").toString());
         }
 
         try {
@@ -247,16 +249,19 @@ public class PlanController {
                     .body(new JSONObject().put("message", "Plan has been updated by another user!!").toString());
         }
 
-        JSONObject mergedPlan = this.planService.mergeData(jsonPlan, key);
+//        JSONObject mergedPlan = this.planService.mergeData(jsonPlan, key);
+//
+//        try {
+//            jsonValidator.validateJSON(mergedPlan);
+//        } catch(ValidationException ex){
+//            return ResponseEntity.status(HttpStatus.BAD_REQUEST).
+//                    body(new JSONObject().put("error",ex.getAllMessages()).toString());
+//        }
+//
+//        String newEtag =  this.planService.savePlan(mergedPlan, key);
 
-        try {
-            jsonValidator.validateJSON(mergedPlan);
-        } catch(ValidationException ex){
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).
-                    body(new JSONObject().put("error",ex.getAllMessages()).toString());
-        }
 
-        String newEtag =  this.planService.savePlan(mergedPlan, key);
+        String newEtag =  this.planService.savePlan(jsonPlan, key);
 
         return ResponseEntity.ok().eTag(newEtag)
                 .body(new JSONObject().put("message: ", "Resource updated successfully!!").toString());
