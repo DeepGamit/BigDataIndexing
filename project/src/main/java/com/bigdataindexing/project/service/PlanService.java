@@ -205,7 +205,7 @@ public class PlanService {
                 Set<String> members = jedis.smembers(key);
                 jedis.close();
                 System.out.println("Members" + ":" + members);
-                if (members.size() > 1) {
+                if (members.size() > 1 || newStr.equals("linkedPlanServices")) {
                     List<Object> listObj = new ArrayList<Object>();
                     for (String member : members) {
                         if (isDelete) {
