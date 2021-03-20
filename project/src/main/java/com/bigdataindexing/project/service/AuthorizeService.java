@@ -15,16 +15,26 @@ import java.util.Date;
 @Service
 public class AuthorizeService {
 
-    private RSAKey rsaPublicJWK;
+    static RSAKey rsaPublicJWK = null;
+    static RSAKey rsaJWK = null;
+     static {
+         try {
+
+             // RSA signatures require a public and private RSA key pair, the public key
+             // must be made known to the JWS recipient in order to verify the signatures
+             rsaJWK = new RSAKeyGenerator(2048)
+                     .keyID("123")
+                     .generate();
+             rsaPublicJWK = rsaJWK.toPublicJWK();
+
+         } catch (JOSEException e) {
+             e.printStackTrace();
+         }
+
+     }
 
     public String generateToken() throws JOSEException {
 
-        // RSA signatures require a public and private RSA key pair, the public key
-        // must be made known to the JWS recipient in order to verify the signatures
-        RSAKey rsaJWK = new RSAKeyGenerator(2048)
-                .keyID("123")
-                .generate();
-        this.rsaPublicJWK = rsaJWK.toPublicJWK();
 
         // Create RSA-signer with the private key
         JWSSigner signer = new RSASSASigner(rsaJWK);
