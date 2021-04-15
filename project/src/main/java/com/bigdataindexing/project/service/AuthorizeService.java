@@ -41,7 +41,7 @@ public class AuthorizeService {
 
         // Prepare JWT with claims set
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                .expirationTime(new Date(new Date().getTime() + 3000 * 1000))
+                .expirationTime(new Date(System.currentTimeMillis() * 1000 * 60 * 2))
                 .build();
 
         SignedJWT signedJWT = new SignedJWT(

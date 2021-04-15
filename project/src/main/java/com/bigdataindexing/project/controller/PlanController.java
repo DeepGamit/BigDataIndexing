@@ -1,10 +1,13 @@
 package com.bigdataindexing.project.controller;
 
 
+import com.bigdataindexing.project.ProjectApplication;
 import com.bigdataindexing.project.service.AuthorizeService;
 import com.bigdataindexing.project.service.PlanService;
 import com.bigdataindexing.project.validator.JsonValidator;
 import org.everit.json.schema.ValidationException;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -16,6 +19,7 @@ import javax.ws.rs.BadRequestException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.HashMap;
 import java.util.Map;
 
 
@@ -25,6 +29,9 @@ public class PlanController {
     PlanService planService;
     AuthorizeService authorizeService;
     JsonValidator jsonValidator;
+
+    @Autowired
+    private RabbitTemplate template;
 
     public PlanController(PlanService planService, AuthorizeService authorizeService, JsonValidator jsonValidator) {
 
@@ -86,6 +93,15 @@ public class PlanController {
         JSONObject response = new JSONObject();
         response.put("objectId", jsonPlan.get("objectId"));
         response.put("message", "Plan Created Successfully!!");
+
+        // index object
+        Map<String, String> actionMap = new HashMap<>();
+        actionMap.put("operation", "SAVE");
+        actionMap.put("body", jsonData);
+
+        System.out.println("Sending message: " + actionMap);
+
+        template.convertAndSend(ProjectApplication.queueName, actionMap);
 
         return ResponseEntity.created(new URI("/plan/" + key)).eTag(etag)
                 .body(response.toString());
@@ -162,6 +178,15 @@ public class PlanController {
                     .body(new JSONObject().put("message", "Plan has been updated by another user!!").toString());
         }
 
+        // index object
+        Map<String, String> actionMap = new HashMap<>();
+        actionMap.put("operation", "DELETE");
+        actionMap.put("body", "{ \"objectId\" : \"" + objectID + "\" }");
+
+        System.out.println("Sending message: " + actionMap);
+
+        template.convertAndSend(ProjectApplication.queueName, actionMap);
+
         this.planService.deletePlan(key);
         return ResponseEntity.noContent().build();
     }
@@ -211,8 +236,17 @@ public class PlanController {
         this.planService.deletePlan(key);
         String newEtag = this.planService.savePlan(jsonPlan, key);
 
+        // index object
+        Map<String, String> actionMap = new HashMap<>();
+        actionMap.put("operation", "SAVE");
+        actionMap.put("body", jsonData);
+
+        System.out.println("Sending message: " + actionMap);
+
+        template.convertAndSend(ProjectApplication.queueName, actionMap);
+
         return ResponseEntity.ok().eTag(newEtag)
-                .body(new JSONObject().put("message: ", "Resource updated successfully!!").toString());
+                .body(new JSONObject().put("message: ", "Plan updated successfully!!").toString());
     }
 
     @RequestMapping(method =  RequestMethod.PATCH, produces = MediaType.APPLICATION_JSON_VALUE, path = "/plan/{objectID}")
@@ -249,22 +283,21 @@ public class PlanController {
                     .body(new JSONObject().put("message", "Plan has been updated by another user!!").toString());
         }
 
-//        JSONObject mergedPlan = this.planService.mergeData(jsonPlan, key);
-//
-//        try {
-//            jsonValidator.validateJSON(mergedPlan);
-//        } catch(ValidationException ex){
-//            return ResponseEntity.status(HttpStatus.BAD_REQUEST).
-//                    body(new JSONObject().put("error",ex.getAllMessages()).toString());
-//        }
-//
-//        String newEtag =  this.planService.savePlan(mergedPlan, key);
-
-
         String newEtag =  this.planService.savePlan(jsonPlan, key);
 
+        Map<String, Object> plan = this.planService.getPlan(key);
+
+        // index object
+        Map<String, String> actionMap = new HashMap<>();
+        actionMap.put("operation", "SAVE");
+        actionMap.put("body", new JSONObject(plan).toString());
+
+        System.out.println("Sending message: " + actionMap);
+
+        template.convertAndSend(ProjectApplication.queueName, actionMap);
+
         return ResponseEntity.ok().eTag(newEtag)
-                .body(new JSONObject().put("message: ", "Resource updated successfully!!").toString());
+                .body(new JSONObject().put("message: ", "Plan updated successfully!!").toString());
     }
 
 }
