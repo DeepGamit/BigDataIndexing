@@ -179,9 +179,12 @@ public class PlanController {
         }
 
         // index object
+
+        Map<String, Object> plan = this.planService.getPlan(key);
+
         Map<String, String> actionMap = new HashMap<>();
         actionMap.put("operation", "DELETE");
-        actionMap.put("body", "{ \"objectId\" : \"" + objectID + "\" }");
+        actionMap.put("body",  new JSONObject(plan).toString());
 
         System.out.println("Sending message: " + actionMap);
 
@@ -237,8 +240,10 @@ public class PlanController {
         String newEtag = this.planService.savePlan(jsonPlan, key);
 
         // index object
+        Map<String, Object> plan = this.planService.getPlan(key);
+
         Map<String, String> actionMap = new HashMap<>();
-        actionMap.put("operation", "SAVE");
+        actionMap.put("operation", "PUT");
         actionMap.put("body", jsonData);
 
         System.out.println("Sending message: " + actionMap);
@@ -285,9 +290,11 @@ public class PlanController {
 
         String newEtag =  this.planService.savePlan(jsonPlan, key);
 
-        Map<String, Object> plan = this.planService.getPlan(key);
+
 
         // index object
+        Map<String, Object> plan = this.planService.getPlan(key);
+
         Map<String, String> actionMap = new HashMap<>();
         actionMap.put("operation", "SAVE");
         actionMap.put("body", new JSONObject(plan).toString());

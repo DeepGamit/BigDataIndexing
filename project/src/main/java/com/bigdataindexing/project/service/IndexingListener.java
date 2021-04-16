@@ -15,6 +15,7 @@ import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.stereotype.Component;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.util.*;
 import java.util.List;
+
 
 @Component
 public class IndexingListener {
@@ -44,7 +46,12 @@ public class IndexingListener {
                     break;
                 }
                 case "DELETE": {
-                    deleteDocument(jsonBody.get("objectId").toString());
+                    deleteDocument(jsonBody);
+                    break;
+                }
+                case "PUT" : {
+                    deleteDocument(jsonBody);
+                    postDocument(jsonBody);
                     break;
                 }
             }
@@ -54,21 +61,87 @@ public class IndexingListener {
         if(!indexExists()) {
             createElasticIndex();
         }
-        IndexRequest request = new IndexRequest(IndexName);
-        convertMapToDocumentIndex(plan,"", request, "plan" );
+
+        convertMapToDocumentIndex(plan,"", "plan" );
+        for (Map.Entry<String, Map<String, Object>> entry : MapOfDocuments.entrySet()) {
+
+            String parentId = entry.getKey().split(":")[0];
+            String objectId = entry.getKey().split(":")[1];
+            IndexRequest request = new IndexRequest(IndexName);
+            request.id(objectId);
+            request.source(entry.getValue());
+            request.routing(parentId);
+            request.setRefreshPolicy("wait_for");
+            IndexResponse indexResponse = client.index(request, RequestOptions.DEFAULT);
+            System.out.println("response id: " + indexResponse.getId() + " parent id: " + parentId);
+
+        }
+
     }
 
-    private static void deleteDocument(String documentId) throws IOException {
-        DeleteRequest request = new DeleteRequest(IndexName, documentId);
-        DeleteResponse deleteResponse = client.delete(
-                request, RequestOptions.DEFAULT);
-        if (deleteResponse.getResult() == DocWriteResponse.Result.NOT_FOUND) {
-            System.out.println("Document " +documentId+" Not Found!!");
+    private static void deleteDocument(JSONObject jsonObject) throws IOException {
+
+        convertToKeys(jsonObject);
+        for(String key : listOfKeys){
+            DeleteRequest request = new DeleteRequest(IndexName, key);
+            DeleteResponse deleteResponse = client.delete(
+                    request, RequestOptions.DEFAULT);
+            if (deleteResponse.getResult() == DocWriteResponse.Result.NOT_FOUND) {
+                System.out.println("Document " + key + " Not Found!!");
+            }
         }
     }
 
+    private static ArrayList<String> listOfKeys = new ArrayList<>();
+    private static Map<String, Map<String, Object>> convertToKeys(JSONObject jsonObject){
+
+        Map<String, Map<String, Object>> map = new HashMap<>();
+        Map<String, Object> valueMap = new HashMap<>();
+        Iterator<String> iterator = jsonObject.keys();
+        while (iterator.hasNext()){
+
+            String key = iterator.next();
+            String redisKey = jsonObject.get("objectId").toString();
+            Object value = jsonObject.get(key);
+
+            if (value instanceof JSONObject) {
+
+                convertToKeys((JSONObject) value);
+
+            } else if (value instanceof JSONArray) {
+
+                convertToKeysList((JSONArray) value);
+
+            } else {
+                valueMap.put(key, value);
+                map.put(redisKey, valueMap);
+            }
+        }
+
+        listOfKeys.add(jsonObject.get("objectId").toString());
+        return map;
+
+    }
+
+    private static List<Object> convertToKeysList(JSONArray array) {
+        List<Object> list = new ArrayList<>();
+        for (int i = 0; i < array.length(); i++) {
+            Object value = array.get(i);
+            if (value instanceof JSONArray) {
+                value = convertToKeysList((JSONArray) value);
+            } else if (value instanceof JSONObject) {
+                value = convertToKeys((JSONObject) value);
+            }
+            list.add(value);
+        }
+        return list;
+    }
+
+
+
+    private static Map<String, Map<String, Object>> MapOfDocuments = new HashMap<>();
     private static Map<String, Map<String, Object>> convertMapToDocumentIndex (JSONObject jsonObject,
-                                                                 String parentId, IndexRequest request, String objectName ) throws IOException {
+                                                                 String parentId, String objectName ) {
 
         Map<String, Map<String, Object>> map = new HashMap<>();
         Map<String, Object> valueMap = new HashMap<>();
@@ -82,11 +155,11 @@ public class IndexingListener {
 
             if (value instanceof JSONObject) {
 
-                convertMapToDocumentIndex((JSONObject) value, jsonObject.get("objectId").toString(), request, key.toString());
+                convertMapToDocumentIndex((JSONObject) value, jsonObject.get("objectId").toString(), key.toString());
 
             } else if (value instanceof JSONArray) {
 
-                convertToList((JSONArray) value, jsonObject.get("objectId").toString(), request, key.toString());
+                convertToList((JSONArray) value, jsonObject.get("objectId").toString(), key.toString());
 
             } else {
                 valueMap.put(key, value);
@@ -102,23 +175,23 @@ public class IndexingListener {
             temp.put("parent", parentId);
             valueMap.put("plan_join", temp);
         }
-        request.id(jsonObject.get("objectId").toString());
-        request.source(valueMap);
-        request.routing(parentId);
-        IndexResponse indexResponse = client.index(request, RequestOptions.DEFAULT);
-        System.out.println("response id: " + indexResponse.getId() +" parent id: " + parentId);
+
+        String id = parentId + ":" + jsonObject.get("objectId").toString();
+        System.out.println(valueMap);
+        MapOfDocuments.put(id, valueMap);
+
 
         return map;
     }
 
-    private static List<Object> convertToList(JSONArray array, String parentId, IndexRequest request, String objectName) throws IOException {
+    private static List<Object> convertToList(JSONArray array, String parentId, String objectName) {
         List<Object> list = new ArrayList<>();
         for (int i = 0; i < array.length(); i++) {
             Object value = array.get(i);
             if (value instanceof JSONArray) {
-                value = convertToList((JSONArray) value, parentId, request, objectName);
+                value = convertToList((JSONArray) value, parentId, objectName);
             } else if (value instanceof JSONObject) {
-                value = convertMapToDocumentIndex((JSONObject) value, parentId, request, objectName);
+                value = convertMapToDocumentIndex((JSONObject) value, parentId, objectName);
             }
             list.add(value);
         }
@@ -134,8 +207,9 @@ public class IndexingListener {
     private static void createElasticIndex() throws IOException {
         CreateIndexRequest request = new CreateIndexRequest(IndexName);
         request.settings(Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 2));
-        XContentBuilder mapping = getMapping();
-        request.mapping(mapping);
+//        XContentBuilder mapping = getMapping();
+        String mapping = getMapping();
+        request.mapping(mapping, XContentType.JSON);
         CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
 
         boolean acknowledged = createIndexResponse.isAcknowledged();
@@ -143,181 +217,189 @@ public class IndexingListener {
 
     }
 
-    private static XContentBuilder getMapping() throws IOException {
-
-        XContentBuilder builder = XContentFactory.jsonBuilder();
-        builder.startObject();
-        {
-            builder.startObject("properties");
-            {
-                builder.startObject("plan");
-                {
-                    builder.startObject("properties");
-                    {
-                        builder.startObject("_org");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                        builder.startObject("objectId");
-                        {
-                            builder.field("type", "keyword");
-                        }
-                        builder.endObject();
-                        builder.startObject("objectType");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                        builder.startObject("planType");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                        builder.startObject("creationDate");
-                        {
-                            builder.field("type", "date");
-                            builder.field("format", "MM-dd-yyyy");
-                        }
-                        builder.endObject();
-                    }
-                    builder.endObject();
-                }
-                builder.endObject();
-                builder.startObject("planCostShares");
-                {
-                    builder.startObject("properties");
-                    {
-                        builder.startObject("copay");
-                        {
-                            builder.field("type", "long");
-                        }
-                        builder.endObject();
-                        builder.startObject("deductible");
-                        {
-                            builder.field("type", "long");
-                        }
-                        builder.endObject();
-                        builder.startObject("_org");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                        builder.startObject("objectId");
-                        {
-                            builder.field("type", "keyword");
-                        }
-                        builder.endObject();
-                        builder.startObject("objectType");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                    }
-                    builder.endObject();
-                }
-                builder.endObject();
-                builder.startObject("linkedPlanServices");
-                {
-                    builder.startObject("properties");
-                    {
-                        builder.startObject("_org");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                        builder.startObject("objectId");
-                        {
-                            builder.field("type", "keyword");
-                        }
-                        builder.endObject();
-                        builder.startObject("objectType");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                    }
-                    builder.endObject();
-                }
-                builder.endObject();
-                builder.startObject("linkedService");
-                {
-                    builder.startObject("properties");
-                    {
-                        builder.startObject("name");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                        builder.startObject("_org");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                        builder.startObject("objectId");
-                        {
-                            builder.field("type", "keyword");
-                        }
-                        builder.endObject();
-                        builder.startObject("objectType");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                    }
-                    builder.endObject();
-                }
-                builder.endObject();
-                builder.startObject("planserviceCostShares");
-                {
-                    builder.startObject("properties");
-                    {
-                        builder.startObject("copay");
-                        {
-                            builder.field("type", "long");
-                        }
-                        builder.endObject();
-                        builder.startObject("deductible");
-                        {
-                            builder.field("type", "long");
-                        }
-                        builder.endObject();
-                        builder.startObject("_org");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                        builder.startObject("objectId");
-                        {
-                            builder.field("type", "keyword");
-                        }
-                        builder.endObject();
-                        builder.startObject("objectType");
-                        {
-                            builder.field("type", "text");
-                        }
-                        builder.endObject();
-                    }
-                    builder.endObject();
-                }
-                builder.endObject();
-                builder.startObject("plan_join");
-                {
-                    builder.field("type", "join");
-                    builder.startObject("relations");
-                    {
-                        builder.array("plan", "planCostShares", "linkedPlanServices");
-                        builder.array("linkedPlanServices", "linkedService", "planserviceCostShares");
-                    }
-                    builder.endObject();
-                }
-                builder.endObject();
-            }
-            builder.endObject();
-        }
-        builder.endObject();
-
-        return builder;
-
+    private static String getMapping() {
+        return "{\"properties\":{\"plan\":{\"properties\":{\"_org\":{\"type\":\"text\"},\"objectId\":{\"type\":\"keyword\"},\"objectType\":{\"type\":\"text\"},\"planType\":{\"type\":\"text\"},\"creationDate\":{\"type\":\"date\",\"format\":\"MM-dd-yyyy\"}}},\"planCostShares\":{\"properties\":{\"copay\":{\"type\":\"long\"},\"deductible\":{\"type\":\"long\"},\"_org\":{\"type\":\"text\"},\"objectId\":{\"type\":\"keyword\"},\"objectType\":{\"type\":\"text\"}}},\"linkedPlanServices\":{\"properties\":{\"_org\":{\"type\":\"text\"},\"objectId\":{\"type\":\"keyword\"},\"objectType\":{\"type\":\"text\"}}},\"linkedService\":{\"properties\":{\"name\":{\"type\":\"text\"},\"_org\":{\"type\":\"text\"},\"objectId\":{\"type\":\"keyword\"},\"objectType\":{\"type\":\"text\"}}},\"planserviceCostShares\":{\"properties\":{\"copay\":{\"type\":\"long\"},\"deductible\":{\"type\":\"long\"},\"_org\":{\"type\":\"text\"},\"objectId\":{\"type\":\"keyword\"},\"objectType\":{\"type\":\"text\"}}},\"plan_join\":{\"type\":\"join\",\"eager_global_ordinals\":true,\"relations\":{\"plan\":[\"planCostShares\",\"linkedPlanServices\"],\"linkedPlanServices\":[\"linkedService\",\"planserviceCostShares\"]}}}}";
     }
+//    private static XContentBuilder getMapping() throws IOException {
+//
+//        XContentBuilder builder = XContentFactory.jsonBuilder();
+//        builder.startObject();
+//        {
+//            builder.startObject("mappings");
+//            {
+//                builder.startObject("properties");
+//                {
+//                    builder.startObject("plan");
+//                    {
+//                        builder.startObject("properties");
+//                        {
+//                            builder.startObject("_org");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("objectId");
+//                            {
+//                                builder.field("type", "keyword");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("objectType");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("planType");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("creationDate");
+//                            {
+//                                builder.field("type", "date");
+//                                builder.field("format", "MM-dd-yyyy");
+//                            }
+//                            builder.endObject();
+//                        }
+//                        builder.endObject();
+//                    }
+//                    builder.endObject();
+//                    builder.startObject("planCostShares");
+//                    {
+//                        builder.startObject("properties");
+//                        {
+//                            builder.startObject("copay");
+//                            {
+//                                builder.field("type", "long");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("deductible");
+//                            {
+//                                builder.field("type", "long");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("_org");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("objectId");
+//                            {
+//                                builder.field("type", "keyword");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("objectType");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                        }
+//                        builder.endObject();
+//                    }
+//                    builder.endObject();
+//                    builder.startObject("linkedPlanServices");
+//                    {
+//                        builder.startObject("properties");
+//                        {
+//                            builder.startObject("_org");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("objectId");
+//                            {
+//                                builder.field("type", "keyword");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("objectType");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                        }
+//                        builder.endObject();
+//                    }
+//                    builder.endObject();
+//                    builder.startObject("linkedService");
+//                    {
+//                        builder.startObject("properties");
+//                        {
+//                            builder.startObject("name");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("_org");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("objectId");
+//                            {
+//                                builder.field("type", "keyword");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("objectType");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                        }
+//                        builder.endObject();
+//                    }
+//                    builder.endObject();
+//                    builder.startObject("planserviceCostShares");
+//                    {
+//                        builder.startObject("properties");
+//                        {
+//                            builder.startObject("copay");
+//                            {
+//                                builder.field("type", "long");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("deductible");
+//                            {
+//                                builder.field("type", "long");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("_org");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("objectId");
+//                            {
+//                                builder.field("type", "keyword");
+//                            }
+//                            builder.endObject();
+//                            builder.startObject("objectType");
+//                            {
+//                                builder.field("type", "text");
+//                            }
+//                            builder.endObject();
+//                        }
+//                        builder.endObject();
+//                    }
+//                    builder.endObject();
+//                    builder.startObject("plan_join");
+//                    {
+//                        builder.field("type", "join");
+//                        builder.field("eager_global_ordinals", "true");
+//                        builder.startObject("relations");
+//                        {
+//                            builder.array("plan", "planCostShares", "linkedPlanServices");
+//                            builder.array("linkedPlanServices", "linkedService", "planserviceCostShares");
+//                        }
+//                        builder.endObject();
+//                    }
+//                    builder.endObject();
+//                }
+//                builder.endObject();
+//            }
+//            builder.endObject();
+//        }
+//        builder.endObject();
+//
+//        return builder;
+//
+//    }
 }
