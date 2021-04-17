@@ -15,7 +15,6 @@ import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.stereotype.Component;
@@ -40,6 +39,7 @@ public class IndexingListener {
             String body = message.get("body");
             JSONObject jsonBody = new JSONObject(body);
 
+
             switch (operation) {
                 case "SAVE": {
                     postDocument(jsonBody);
@@ -47,11 +47,6 @@ public class IndexingListener {
                 }
                 case "DELETE": {
                     deleteDocument(jsonBody);
-                    break;
-                }
-                case "PUT" : {
-                    deleteDocument(jsonBody);
-                    postDocument(jsonBody);
                     break;
                 }
             }
@@ -137,8 +132,6 @@ public class IndexingListener {
         return list;
     }
 
-
-
     private static Map<String, Map<String, Object>> MapOfDocuments = new HashMap<>();
     private static Map<String, Map<String, Object>> convertMapToDocumentIndex (JSONObject jsonObject,
                                                                  String parentId, String objectName ) {
@@ -180,7 +173,6 @@ public class IndexingListener {
         System.out.println(valueMap);
         MapOfDocuments.put(id, valueMap);
 
-
         return map;
     }
 
@@ -208,7 +200,6 @@ public class IndexingListener {
         CreateIndexRequest request = new CreateIndexRequest(IndexName);
         request.settings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 1));
         XContentBuilder mapping = getMapping();
-//        String mapping = getMapping();
         request.mapping(mapping);
         CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
 

@@ -236,17 +236,27 @@ public class PlanController {
                     body(new JSONObject().put("error",ex.getAllMessages()).toString());
         }
 
-        this.planService.deletePlan(key);
-        String newEtag = this.planService.savePlan(jsonPlan, key);
-
-        // index object
         Map<String, Object> plan = this.planService.getPlan(key);
 
         Map<String, String> actionMap = new HashMap<>();
-        actionMap.put("operation", "PUT");
-        actionMap.put("body", jsonData);
+        actionMap.put("operation", "DELETE");
+        actionMap.put("body",  new JSONObject(plan).toString());
 
         System.out.println("Sending message: " + actionMap);
+
+        template.convertAndSend(ProjectApplication.queueName, actionMap);
+
+        this.planService.deletePlan(key);
+
+        String newEtag = this.planService.savePlan(jsonPlan, key);
+
+        // index object
+        Map<String, Object> newPlan = this.planService.getPlan(key);
+
+        Map<String, String> newActionMap = new HashMap<>();
+        newActionMap.put("operation", "SAVE");
+        newActionMap.put("body",  new JSONObject(newPlan).toString());
+        System.out.println("Sending message: " + newActionMap);
 
         template.convertAndSend(ProjectApplication.queueName, actionMap);
 
