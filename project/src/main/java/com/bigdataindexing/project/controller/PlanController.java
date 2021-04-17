@@ -251,14 +251,14 @@ public class PlanController {
         String newEtag = this.planService.savePlan(jsonPlan, key);
 
         // index object
-        Map<String, Object> newPlan = this.planService.getPlan(key);
+//        Map<String, Object> newPlan = this.planService.getPlan(key);
 
         Map<String, String> newActionMap = new HashMap<>();
         newActionMap.put("operation", "SAVE");
-        newActionMap.put("body",  new JSONObject(newPlan).toString());
+        newActionMap.put("body", jsonData);
         System.out.println("Sending message: " + newActionMap);
 
-        template.convertAndSend(ProjectApplication.queueName, actionMap);
+        template.convertAndSend(ProjectApplication.queueName, newActionMap);
 
         return ResponseEntity.ok().eTag(newEtag)
                 .body(new JSONObject().put("message: ", "Plan updated successfully!!").toString());

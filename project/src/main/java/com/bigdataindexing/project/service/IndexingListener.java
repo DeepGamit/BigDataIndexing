@@ -57,7 +57,8 @@ public class IndexingListener {
             createElasticIndex();
         }
 
-        convertMapToDocumentIndex(plan,"", "plan" );
+        Map<String, Map<String, Object>> MapOfDocuments = new HashMap<>();
+        convertMapToDocumentIndex(plan,"", "plan" , MapOfDocuments );
         for (Map.Entry<String, Map<String, Object>> entry : MapOfDocuments.entrySet()) {
 
             String parentId = entry.getKey().split(":")[0];
@@ -76,7 +77,8 @@ public class IndexingListener {
 
     private static void deleteDocument(JSONObject jsonObject) throws IOException {
 
-        convertToKeys(jsonObject);
+        ArrayList<String> listOfKeys = new ArrayList<>();
+        convertToKeys(jsonObject, listOfKeys);
         for(String key : listOfKeys){
             DeleteRequest request = new DeleteRequest(IndexName, key);
             DeleteResponse deleteResponse = client.delete(
@@ -87,8 +89,7 @@ public class IndexingListener {
         }
     }
 
-    private static ArrayList<String> listOfKeys = new ArrayList<>();
-    private static Map<String, Map<String, Object>> convertToKeys(JSONObject jsonObject){
+    private static Map<String, Map<String, Object>> convertToKeys(JSONObject jsonObject, ArrayList listOfKeys){
 
         Map<String, Map<String, Object>> map = new HashMap<>();
         Map<String, Object> valueMap = new HashMap<>();
@@ -101,11 +102,11 @@ public class IndexingListener {
 
             if (value instanceof JSONObject) {
 
-                convertToKeys((JSONObject) value);
+                convertToKeys((JSONObject) value, listOfKeys);
 
             } else if (value instanceof JSONArray) {
 
-                convertToKeysList((JSONArray) value);
+                convertToKeysList((JSONArray) value, listOfKeys);
 
             } else {
                 valueMap.put(key, value);
@@ -118,23 +119,23 @@ public class IndexingListener {
 
     }
 
-    private static List<Object> convertToKeysList(JSONArray array) {
+    private static List<Object> convertToKeysList(JSONArray array, ArrayList listOfKeys) {
         List<Object> list = new ArrayList<>();
         for (int i = 0; i < array.length(); i++) {
             Object value = array.get(i);
             if (value instanceof JSONArray) {
-                value = convertToKeysList((JSONArray) value);
+                value = convertToKeysList((JSONArray) value, listOfKeys);
             } else if (value instanceof JSONObject) {
-                value = convertToKeys((JSONObject) value);
+                value = convertToKeys((JSONObject) value, listOfKeys);
             }
             list.add(value);
         }
         return list;
     }
 
-    private static Map<String, Map<String, Object>> MapOfDocuments = new HashMap<>();
+
     private static Map<String, Map<String, Object>> convertMapToDocumentIndex (JSONObject jsonObject,
-                                                                 String parentId, String objectName ) {
+                                                                 String parentId, String objectName, Map<String, Map<String, Object>> MapOfDocuments  ) {
 
         Map<String, Map<String, Object>> map = new HashMap<>();
         Map<String, Object> valueMap = new HashMap<>();
@@ -148,11 +149,11 @@ public class IndexingListener {
 
             if (value instanceof JSONObject) {
 
-                convertMapToDocumentIndex((JSONObject) value, jsonObject.get("objectId").toString(), key.toString());
+                convertMapToDocumentIndex((JSONObject) value, jsonObject.get("objectId").toString(), key.toString(), MapOfDocuments);
 
             } else if (value instanceof JSONArray) {
 
-                convertToList((JSONArray) value, jsonObject.get("objectId").toString(), key.toString());
+                convertToList((JSONArray) value, jsonObject.get("objectId").toString(), key.toString(), MapOfDocuments);
 
             } else {
                 valueMap.put(key, value);
@@ -176,14 +177,14 @@ public class IndexingListener {
         return map;
     }
 
-    private static List<Object> convertToList(JSONArray array, String parentId, String objectName) {
+    private static List<Object> convertToList(JSONArray array, String parentId, String objectName, Map<String, Map<String, Object>> MapOfDocuments) {
         List<Object> list = new ArrayList<>();
         for (int i = 0; i < array.length(); i++) {
             Object value = array.get(i);
             if (value instanceof JSONArray) {
-                value = convertToList((JSONArray) value, parentId, objectName);
+                value = convertToList((JSONArray) value, parentId, objectName, MapOfDocuments);
             } else if (value instanceof JSONObject) {
-                value = convertMapToDocumentIndex((JSONObject) value, parentId, objectName);
+                value = convertMapToDocumentIndex((JSONObject) value, parentId, objectName, MapOfDocuments);
             }
             list.add(value);
         }
