@@ -30,7 +30,7 @@ public class IndexingListener {
 
     private static RestHighLevelClient client = new RestHighLevelClient(
             RestClient.builder(new HttpHost("localhost", 9200, "http")));
-    private static final String IndexName="planindex";
+    private static final String IndexName="indexplan";
 
 
     public void receiveMessage(Map<String, String> message) throws IOException {
@@ -206,10 +206,10 @@ public class IndexingListener {
 
     private static void createElasticIndex() throws IOException {
         CreateIndexRequest request = new CreateIndexRequest(IndexName);
-        request.settings(Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 2));
-//        XContentBuilder mapping = getMapping();
-        String mapping = getMapping();
-        request.mapping(mapping, XContentType.JSON);
+        request.settings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 1));
+        XContentBuilder mapping = getMapping();
+//        String mapping = getMapping();
+        request.mapping(mapping);
         CreateIndexResponse createIndexResponse = client.indices().create(request, RequestOptions.DEFAULT);
 
         boolean acknowledged = createIndexResponse.isAcknowledged();
@@ -217,189 +217,183 @@ public class IndexingListener {
 
     }
 
-    private static String getMapping() {
-        return "{\"properties\":{\"plan\":{\"properties\":{\"_org\":{\"type\":\"text\"},\"objectId\":{\"type\":\"keyword\"},\"objectType\":{\"type\":\"text\"},\"planType\":{\"type\":\"text\"},\"creationDate\":{\"type\":\"date\",\"format\":\"MM-dd-yyyy\"}}},\"planCostShares\":{\"properties\":{\"copay\":{\"type\":\"long\"},\"deductible\":{\"type\":\"long\"},\"_org\":{\"type\":\"text\"},\"objectId\":{\"type\":\"keyword\"},\"objectType\":{\"type\":\"text\"}}},\"linkedPlanServices\":{\"properties\":{\"_org\":{\"type\":\"text\"},\"objectId\":{\"type\":\"keyword\"},\"objectType\":{\"type\":\"text\"}}},\"linkedService\":{\"properties\":{\"name\":{\"type\":\"text\"},\"_org\":{\"type\":\"text\"},\"objectId\":{\"type\":\"keyword\"},\"objectType\":{\"type\":\"text\"}}},\"planserviceCostShares\":{\"properties\":{\"copay\":{\"type\":\"long\"},\"deductible\":{\"type\":\"long\"},\"_org\":{\"type\":\"text\"},\"objectId\":{\"type\":\"keyword\"},\"objectType\":{\"type\":\"text\"}}},\"plan_join\":{\"type\":\"join\",\"eager_global_ordinals\":true,\"relations\":{\"plan\":[\"planCostShares\",\"linkedPlanServices\"],\"linkedPlanServices\":[\"linkedService\",\"planserviceCostShares\"]}}}}";
+    private static XContentBuilder getMapping() throws IOException {
+
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+            builder.startObject();
+            {
+                builder.startObject("properties");
+                {
+                    builder.startObject("plan");
+                    {
+                        builder.startObject("properties");
+                        {
+                            builder.startObject("_org");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                            builder.startObject("objectId");
+                            {
+                                builder.field("type", "keyword");
+                            }
+                            builder.endObject();
+                            builder.startObject("objectType");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                            builder.startObject("planType");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                            builder.startObject("creationDate");
+                            {
+                                builder.field("type", "date");
+                                builder.field("format", "MM-dd-yyyy");
+                            }
+                            builder.endObject();
+                        }
+                        builder.endObject();
+                    }
+                    builder.endObject();
+                    builder.startObject("planCostShares");
+                    {
+                        builder.startObject("properties");
+                        {
+                            builder.startObject("copay");
+                            {
+                                builder.field("type", "long");
+                            }
+                            builder.endObject();
+                            builder.startObject("deductible");
+                            {
+                                builder.field("type", "long");
+                            }
+                            builder.endObject();
+                            builder.startObject("_org");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                            builder.startObject("objectId");
+                            {
+                                builder.field("type", "keyword");
+                            }
+                            builder.endObject();
+                            builder.startObject("objectType");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                        }
+                        builder.endObject();
+                    }
+                    builder.endObject();
+                    builder.startObject("linkedPlanServices");
+                    {
+                        builder.startObject("properties");
+                        {
+                            builder.startObject("_org");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                            builder.startObject("objectId");
+                            {
+                                builder.field("type", "keyword");
+                            }
+                            builder.endObject();
+                            builder.startObject("objectType");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                        }
+                        builder.endObject();
+                    }
+                    builder.endObject();
+                    builder.startObject("linkedService");
+                    {
+                        builder.startObject("properties");
+                        {
+                            builder.startObject("name");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                            builder.startObject("_org");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                            builder.startObject("objectId");
+                            {
+                                builder.field("type", "keyword");
+                            }
+                            builder.endObject();
+                            builder.startObject("objectType");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                        }
+                        builder.endObject();
+                    }
+                    builder.endObject();
+                    builder.startObject("planserviceCostShares");
+                    {
+                        builder.startObject("properties");
+                        {
+                            builder.startObject("copay");
+                            {
+                                builder.field("type", "long");
+                            }
+                            builder.endObject();
+                            builder.startObject("deductible");
+                            {
+                                builder.field("type", "long");
+                            }
+                            builder.endObject();
+                            builder.startObject("_org");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                            builder.startObject("objectId");
+                            {
+                                builder.field("type", "keyword");
+                            }
+                            builder.endObject();
+                            builder.startObject("objectType");
+                            {
+                                builder.field("type", "text");
+                            }
+                            builder.endObject();
+                        }
+                        builder.endObject();
+                    }
+                    builder.endObject();
+                    builder.startObject("plan_join");
+                    {
+                        builder.field("type", "join");
+                        builder.field("eager_global_ordinals", "true");
+                        builder.startObject("relations");
+                        {
+                            builder.array("plan", "planCostShares", "linkedPlanServices");
+                            builder.array("linkedPlanServices", "linkedService", "planserviceCostShares");
+                        }
+                        builder.endObject();
+                    }
+                    builder.endObject();
+                }
+                builder.endObject();
+            }
+            builder.endObject();
+
+        return builder;
+
     }
-//    private static XContentBuilder getMapping() throws IOException {
-//
-//        XContentBuilder builder = XContentFactory.jsonBuilder();
-//        builder.startObject();
-//        {
-//            builder.startObject("mappings");
-//            {
-//                builder.startObject("properties");
-//                {
-//                    builder.startObject("plan");
-//                    {
-//                        builder.startObject("properties");
-//                        {
-//                            builder.startObject("_org");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("objectId");
-//                            {
-//                                builder.field("type", "keyword");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("objectType");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("planType");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("creationDate");
-//                            {
-//                                builder.field("type", "date");
-//                                builder.field("format", "MM-dd-yyyy");
-//                            }
-//                            builder.endObject();
-//                        }
-//                        builder.endObject();
-//                    }
-//                    builder.endObject();
-//                    builder.startObject("planCostShares");
-//                    {
-//                        builder.startObject("properties");
-//                        {
-//                            builder.startObject("copay");
-//                            {
-//                                builder.field("type", "long");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("deductible");
-//                            {
-//                                builder.field("type", "long");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("_org");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("objectId");
-//                            {
-//                                builder.field("type", "keyword");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("objectType");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                        }
-//                        builder.endObject();
-//                    }
-//                    builder.endObject();
-//                    builder.startObject("linkedPlanServices");
-//                    {
-//                        builder.startObject("properties");
-//                        {
-//                            builder.startObject("_org");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("objectId");
-//                            {
-//                                builder.field("type", "keyword");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("objectType");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                        }
-//                        builder.endObject();
-//                    }
-//                    builder.endObject();
-//                    builder.startObject("linkedService");
-//                    {
-//                        builder.startObject("properties");
-//                        {
-//                            builder.startObject("name");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("_org");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("objectId");
-//                            {
-//                                builder.field("type", "keyword");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("objectType");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                        }
-//                        builder.endObject();
-//                    }
-//                    builder.endObject();
-//                    builder.startObject("planserviceCostShares");
-//                    {
-//                        builder.startObject("properties");
-//                        {
-//                            builder.startObject("copay");
-//                            {
-//                                builder.field("type", "long");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("deductible");
-//                            {
-//                                builder.field("type", "long");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("_org");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("objectId");
-//                            {
-//                                builder.field("type", "keyword");
-//                            }
-//                            builder.endObject();
-//                            builder.startObject("objectType");
-//                            {
-//                                builder.field("type", "text");
-//                            }
-//                            builder.endObject();
-//                        }
-//                        builder.endObject();
-//                    }
-//                    builder.endObject();
-//                    builder.startObject("plan_join");
-//                    {
-//                        builder.field("type", "join");
-//                        builder.field("eager_global_ordinals", "true");
-//                        builder.startObject("relations");
-//                        {
-//                            builder.array("plan", "planCostShares", "linkedPlanServices");
-//                            builder.array("linkedPlanServices", "linkedService", "planserviceCostShares");
-//                        }
-//                        builder.endObject();
-//                    }
-//                    builder.endObject();
-//                }
-//                builder.endObject();
-//            }
-//            builder.endObject();
-//        }
-//        builder.endObject();
-//
-//        return builder;
-//
-//    }
+
 }
